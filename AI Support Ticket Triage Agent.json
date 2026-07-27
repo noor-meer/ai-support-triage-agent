@@ -1,0 +1,657 @@
+{
+  "name": "AI Support Ticket Triage Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {}
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "486e10ae-566f-4711-a490-717314112657",
+      "name": "Gmail Trigger",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "UlopsgxwdE5sdM2b",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a customer support triage assistant. Read the following support email and classify it.\n\nEmail Subject: {{ $json.Subject }}\nEmail Body: {{ $json.snippet }}\n\nRespond ONLY with valid JSON in this exact format, no extra text, no markdown formatting:\n{\n  \"category\": \"billing\" or \"bug\" or \"general_question\" or \"urgent_complaint\",\n  \"urgency\": \"low\" or \"medium\" or \"high\",\n  \"sentiment\": \"positive\" or \"neutral\" or \"negative\" or \"angry\",\n  \"confidence\": a number from 0 to 100,\n  \"reasoning\": \"a short one-sentence explanation of your classification\"\n}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "fc125896-67be-4f16-b4c7-758fd7bad3ae",
+      "name": "Message a model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "icjYdxKpum4q951f",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Step 1: Get the raw text Gemini returned\nconst rawText = $input.first().json.content.parts[0].text;\n\n// Step 2: Convert that text string into a real JSON object\nconst parsed = JSON.parse(rawText);\n\n// Step 3: Return the clean, usable fields\nreturn [\n  {\n    json: {\n      category: parsed.category,\n      urgency: parsed.urgency,\n      sentiment: parsed.sentiment,\n      confidence: parsed.confidence,\n      reasoning: parsed.reasoning\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        0
+      ],
+      "id": "c5b108c7-7fa9-480c-a40f-154b0c5d41d4",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e06d4216-282c-4595-8b8e-2d03da83d249",
+              "leftValue": "={{ $json.category }}",
+              "rightValue": "general_question",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "55fe8766-9675-4033-8b95-88416351af1e",
+              "leftValue": "={{ $json.confidence }}",
+              "rightValue": 70,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        800,
+        0
+      ],
+      "id": "dc64ce22-28df-4e94-b322-3a61525c77d4",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0BL51T3R34",
+          "mode": "list",
+          "cachedResultName": "support-escalations"
+        },
+        "text": "=🚨 New Support Ticket - Needs Review  From: {{ $('Gmail Trigger').item.json.From }} Subject: {{ $('Gmail Trigger').item.json.Subject }}  AI Classification: Category: {{ $json.category }} Urgency: {{ $json.urgency }} Sentiment: {{ $json.sentiment }} Confidence: {{ $json.confidence }}%  AI Reasoning: {{ $json.reasoning }}  Original Message: {{ $('Gmail Trigger').item.json.snippet }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1088,
+        96
+      ],
+      "id": "68ce774b-e921-43e2-bffe-dc04d1e11fb7",
+      "name": "Send a message",
+      "webhookId": "15b02917-19e8-4830-82a2-5ea0e35decf0",
+      "credentials": {
+        "slackApi": {
+          "id": "5XEP8AQnletn9uoP",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a friendly customer support agent. Write a helpful, warm, and professional reply to this customer's question.\n\nCustomer's Email Subject: {{ $('Gmail Trigger').item.json.Subject }}\nCustomer's Message: {{ $('Gmail Trigger').item.json.snippet }}\n\nGuidelines:\n- Keep the reply short and clear (3-5 sentences)\n- Be warm and professional, not robotic\n- Do NOT invent or guess ANY specific facts — including business hours, policies, prices, order numbers, or timelines — even if it seems like a reasonable guess. If the customer's question requires specific factual information you were not given, say so honestly and let them know a team member will follow up with exact details.\ns) — if the answer requires specific account data, politely ask the customer to reply with more details instead\n- Sign off as \"The Support Team\"\n\nReply with ONLY the email reply text, nothing else - no subject line, no JSON, no extra commentary."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        1024,
+        -96
+      ],
+      "id": "33e4a4a5-a680-4a07-90ca-bc6769b15787",
+      "name": "Message a model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "icjYdxKpum4q951f",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the reply text Gemini drafted\nconst replyText = $input.first().json.content.parts[0].text;\n\n// Pass it forward as a clean field\nreturn [\n  {\n    json: {\n      replyText: replyText\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1376,
+        -96
+      ],
+      "id": "0ef82506-9ec0-45a9-8b7a-c3ee1433c7c0",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0BL51T3R34",
+          "mode": "list",
+          "cachedResultName": "support-escalations"
+        },
+        "text": "=📤 Auto-reply going out in 2 minutes  To: {{ $('Gmail Trigger').item.json.From }} Subject: {{ $('Gmail Trigger').item.json.Subject }}  Draft Reply: {{ $json.replyText }}  (No action needed unless something looks wrong)",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1600,
+        -96
+      ],
+      "id": "de55dd7e-d868-46be-8265-9ab196840086",
+      "name": "Send a message1",
+      "webhookId": "522b1229-64b5-4e17-b629-2eee1c0b081d",
+      "credentials": {
+        "slackApi": {
+          "id": "5XEP8AQnletn9uoP",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "minutes"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1824,
+        -96
+      ],
+      "id": "5c1a785e-2b04-4e13-b221-6d1a07248c32",
+      "name": "Wait",
+      "webhookId": "5fc5776d-04ef-40e0-9a93-18665754eb42"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Gmail Trigger').item.json.From }}",
+        "subject": "=Re: {{ $('Gmail Trigger').item.json.Subject }}",
+        "message": "={{ $('Code in JavaScript1').item.json.replyText }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2048,
+        -96
+      ],
+      "id": "f12a7c8a-9127-40b8-a395-f3a16295e3bb",
+      "name": "Send a message2",
+      "webhookId": "a067afd7-3a07-430c-9e0c-f95fb88dab87",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "UlopsgxwdE5sdM2b",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1u3i0KI3xkQVj8-kKuOJ7p30qeF7IGMJxL33c1TeKxek",
+          "mode": "list",
+          "cachedResultName": "Support Ticket Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1u3i0KI3xkQVj8-kKuOJ7p30qeF7IGMJxL33c1TeKxek/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1u3i0KI3xkQVj8-kKuOJ7p30qeF7IGMJxL33c1TeKxek/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{ $now }}",
+            "From ": "={{ $('Gmail Trigger').item.json.From }}",
+            "Subject": "={{ $('Gmail Trigger').item.json.Subject }}",
+            "Category": "={{ $('Code in JavaScript').item.json.category }}",
+            "Urgency": "={{ $('Code in JavaScript').item.json.urgency }}",
+            "Sentiment": "={{ $('Code in JavaScript').item.json.sentiment }}",
+            "Confidence": "={{ $('Code in JavaScript').item.json.confidence }}",
+            "Path": "=Escalated",
+            "Reply Sent": "=No"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "From ",
+              "displayName": "From ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Urgency",
+              "displayName": "Urgency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Sentiment",
+              "displayName": "Sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Confidence",
+              "displayName": "Confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Path",
+              "displayName": "Path",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reply Sent",
+              "displayName": "Reply Sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1376,
+        96
+      ],
+      "id": "886b1135-da29-4b67-a278-f5a6afa3be08",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qmUAduKiTgRbXosP",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1u3i0KI3xkQVj8-kKuOJ7p30qeF7IGMJxL33c1TeKxek",
+          "mode": "list",
+          "cachedResultName": "Support Ticket Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1u3i0KI3xkQVj8-kKuOJ7p30qeF7IGMJxL33c1TeKxek/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1u3i0KI3xkQVj8-kKuOJ7p30qeF7IGMJxL33c1TeKxek/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Path": "=Auto-Handled",
+            "Reply Sent": "=Yes",
+            "Timestamp": "={{ $now }}",
+            "From ": "={{ $('Gmail Trigger').item.json.From }}",
+            "Subject": "={{ $('Gmail Trigger').item.json.Subject }}",
+            "Category": "={{ $('Code in JavaScript').item.json.category }}",
+            "Urgency": "={{ $('Code in JavaScript').item.json.urgency }}",
+            "Sentiment": "={{ $('Code in JavaScript').item.json.sentiment }}",
+            "Confidence": "={{ $('Code in JavaScript').item.json.confidence }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "From ",
+              "displayName": "From ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Urgency",
+              "displayName": "Urgency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Sentiment",
+              "displayName": "Sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Confidence",
+              "displayName": "Confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Path",
+              "displayName": "Path",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reply Sent",
+              "displayName": "Reply Sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2272,
+        -96
+      ],
+      "id": "da2e33db-0b94-4348-96fc-5c21297f7e80",
+      "name": "Append row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qmUAduKiTgRbXosP",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Message a model1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Send a message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message1": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Send a message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message2": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "518b3984-a83f-4dec-ab03-f871344d6080",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6e48c2ac2e73de7edc978e08e8b137adf589ed9f5cfd002a6be4572196f59fd1"
+  },
+  "id": "SU8SRauHhMOMwVyK",
+  "tags": []
+}

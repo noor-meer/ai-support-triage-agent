@@ -59,6 +59,10 @@ This project was upgraded from a general-purpose AI responder into a RAG-grounde
 5. Update the Slack channel name and Google Sheet reference to your own
 6. Activate the workflow
 
+## Demo
+
+Watch the full walkthrough (https://drive.google.com/file/d/1XG_W14WNfk_f8VdP45LEcsOgCD1_Am4w/view?usp=sharing)
+
 ## 📌 Status
 
 Fully functional — tested end-to-end for both the RAG-powered auto-handle path and the escalation path, including a full hands-off (no manual node execution) live test.
